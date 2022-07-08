@@ -1,0 +1,562 @@
+MID Assignment
+========================================================================================================================================================================================================================================
+1.Compare the kubia-rc.yaml (/root/kubernetes-training/04-controllers) and the kubia-replicaset.yaml (/root/kubernetes-training/05-services).
+
+What are the differences file-wise?
+Differences filewise:
+[root@ip-172-31-17-218 04-controllers]# sdiff -s /root/kubernetes-training/04-controllers/kubia-rc.yaml /root/kubernetes-training/05-services/kubia-replicaset.yaml
+apiVersion: v1                                                | apiVersion: apps/v1
+kind: ReplicationController                                   | kind: ReplicaSet
+  name: kubia2                                                |   name: kubia
+  replicas: 3                                                 |   replicas: 1
+    app: kubia                                                |     matchLabels:
+                                                              >       app: kubia
+        ports:                                                <
+        - containerPort: 8080                                 <
+
+Run the kubia-replicaset.yaml .
+
+[root@ip-172-31-17-218 05-services]# cat kubia-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubia2
+spec:
+  clusterIP: 10.99.10.99
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: kubia
+
+[root@ip-172-31-17-218 05-services]# kubectl apply -f kubia-replicaset.yaml
+replicaset.apps/kubia created
+
+[root@ip-172-31-17-218 05-services]# kubectl get po -o wide
+NAME          READY   STATUS    RESTARTS   AGE   IP               NODE                                               NOMINATED NODE   READINESS GATES
+kubia-v7klf   1/1     Running   0          31s   192.168.202.50   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+
+
+Identify what commands can be run after "kubectl apply...."
+kubectl apply -f <yaml file name>
+kubectl apply -f .   (to create resources from all yaml files on this path)
+kubectl get rs
+kubectl get pods
+kubectl delete pod 
+kubectl scale 
+kubectl describe 
+
+
+Make a service over these pods (kubia-replicaset) and see if the service picks up the web-service within the pod ("You have hit....." message)
+[root@ip-172-31-17-218 05-services]# cat kubia-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubia2
+spec:
+  clusterIP: 10.99.10.99
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: kubia
+
+[root@ip-172-31-17-218 05-services]# kubectl apply -f kubia-svc.yaml
+service/kubia2 created
+
+[root@ip-172-31-17-218 05-services]# kubectl get svc -o wide
+NAME         TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)   AGE     SELECTOR
+kubernetes   ClusterIP   10.96.0.1     <none>        443/TCP   4m35s   <none>
+kubia2       ClusterIP   10.99.10.99   <none>        80/TCP    18s     app=kubia
+
+[root@ip-172-31-17-218 05-services]# curl 10.99.10.99:80
+You've hit kubia-v7klf
+
+
+Negative Testing : change the labels of the pod and see if the service is still applied on those pods
+Since the replicaset has created the POD, so as soon as I tried to change the label of existing POD, it spawn new pod with old label and old pod was updated with new label.
+Even if I try to delete the POD with label as app=kubia, it creates new POD with same label. So, service remains applied post doing these changes.
+
+
+[root@ip-172-31-17-218 05-services]# kubectl apply -f kubia-replicaset.yaml
+replicaset.apps/kubia created
+[root@ip-172-31-17-218 05-services]# kubectl apply -f kubia-svc.yaml
+service/kubia2 created
+[root@ip-172-31-17-218 05-services]# curl 10.99.10.99:80
+You've hit kubia-rgbnb
+[root@ip-172-31-17-218 05-services]# kubectl get pods --show-labels
+NAME          READY   STATUS    RESTARTS   AGE   LABELS
+kubia-rgbnb   1/1     Running   0          62s   app=kubia
+[root@ip-172-31-17-218 05-services]# kubectl label --overwrite pods kubia-rgbnb app=test
+pod/kubia-rgbnb labeled
+[root@ip-172-31-17-218 05-services]# kubectl get pods --show-labels
+NAME          READY   STATUS    RESTARTS   AGE   LABELS
+kubia-5kp5c   1/1     Running   0          7s    app=kubia
+kubia-rgbnb   1/1     Running   0          99s   app=test
+[root@ip-172-31-17-218 05-services]#
+[root@ip-172-31-17-218 05-services]# curl 10.99.10.99:80
+You've hit kubia-5kp5c
+
+
+[root@ip-172-31-17-218 05-services]# kubectl delete pod kubia-5kp5c
+pod "kubia-5kp5c" deleted
+^C
+[root@ip-172-31-17-218 05-services]# kubectl get pods --show-labels
+NAME          READY   STATUS        RESTARTS   AGE     LABELS
+kubia-5kp5c   1/1     Terminating   0          2m25s   app=kubia
+kubia-fk48m   1/1     Running       0          13s     app=kubia
+kubia-rgbnb   1/1     Running       0          3m57s   app=test
+
+
+
+========================================================================================================================================================================================================================================
+go to cronjob.yaml (/root/kubernetes-training/04-controllers)
+Open the file and change the 1st line to (apiVersion: batch/v1beta1).
+Run this file
+
+[root@ip-172-31-17-218 04-controllers]# kubectl apply -f cronjob.yaml
+cronjob.batch/batch-job-every-fifteen-minutes created
+
+
+Find out what is the command to "get" the running jobs.
+[root@ip-172-31-17-218 04-controllers]# kubectl get jobs
+NAME                                         COMPLETIONS   DURATION   AGE
+batch-job-every-fifteen-minutes-1657224900   0/1           8s         8s
+
+
+Observe and if possible, paste the results from your practicals.
+
+kubetcl get cronjobs
+kubectl explain jobs
+
+
+[root@ip-172-31-17-218 04-controllers]# cat cronjob.yaml
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: batch-job-every-fifteen-minutes
+spec:
+  schedule: "0,15,30,45 * * * *"
+
+[root@ip-172-31-17-218 04-controllers]# kubectl get jobs
+NAME                                         COMPLETIONS   DURATION   AGE
+batch-job-every-fifteen-minutes-1657251900   1/1           2m6s       32m
+batch-job-every-fifteen-minutes-1657252800   1/1           2m5s       17m
+batch-job-every-fifteen-minutes-1657253700   1/1           2m4s       2m28s
+
+
+Also identify how you would "permanently arrest" the jobs from running.
+[root@ip-172-31-17-218 04-controllers]# kubectl delete jobs --all
+job.batch "batch-job-every-fifteen-minutes-1657251900" deleted
+job.batch "batch-job-every-fifteen-minutes-1657252800" deleted
+job.batch "batch-job-every-fifteen-minutes-1657253700" deleted
+
+[root@ip-172-31-17-218 04-controllers]# kubectl get jobs
+No resources found in default namespace.
+
+
+What is the change from normal Jobs (jobs v/s cronJobs) - Your observation in one sentence.
+Normal jobs creates pods that lives till the job is finished and cronjobs do the same thing, except they run as per schedule mentioned in cron.
+
+
+=========================================================================================================================================================================================================================================
+POST Assignment
+=========================================================================================================================================================================================================================================
+1.Write a common use-case, where you will use a daemon set instead of replica set.
+-A daemonset ensures that all nodes or group of nodes (defined by common label or namespace) run a copy of a POD. As new Nodes added to Cluster, pods are added to them.
+-If copy of a POD is needed in every Node, then daemonset is used. If we check yaml for same, then here kind would be DaemonSet.
+-Use Cases:
+	Let say we are from OPS team, then we need some Node monitoring app or Performance monitoring app in each Node (as a Pre-requisite) to share the Node statistics, then DaemonSet can be used.
+	Let say some Health check app needs to be there in all Nodes as a Operational Requirement, then we can use daemonset to create POD, so as Nodes comes up, so does our Health check POD.
+	
+[root@ip-172-31-17-218 04-controllers]# cat ssd-monitor-daemonset.yaml
+apiVersion: apps/v1beta2
+kind: DaemonSet
+metadata:
+  name: ssd-monitor
+spec:
+  selector:
+    matchLabels:
+      app: ssd-monitor
+
+	  
+
+Replica Set - We use replicaset, when we need availability of a specific number or replicas of same POD, at all the time. Kind is ReplicaSet and Key is Replicas and in value we have to mention how many replicas needed.
+So, lets say if we have replica as 3, then Kubernetes maintains 3 Replicas running at any time. If lets say 1 POD is deleted by us, then Kubernetes will create it again. It is used, wherein HA needs to be guaranteed,
+new PODs is created by rs, without user getting feel that some issue has occured. 
+
+[root@ip-172-31-17-218 04-controllers]# cat kubia-replicaset.yaml
+apiVersion: apps/v1beta2
+kind: ReplicaSet
+metadata:
+  name: kubia
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kubia
+
+=============================================================================================================================================================================================================================================
+2.Suppose you have deployed your application using a deployment controller. Assume the initial number of replicas is one. Write the steps needed to update a container's image using deployment, making sure that there is zero downtime.
+-Deploy application using a deployment yaml.
+-Now, Initial Replica was 1 in that yaml file
+-Scale up the Replica to 2 using scale command. As, increase or decrease the replicas is only possible via deployment. Alternatively, we can update replicas=2 in deployment.yaml file and apply the changes with apply command.
+-Change image in deployment by using set image command. 
+-Then rolling update will be used, i.e images of the app/pods would be upgraded one by one without any downtime. 
+-While one of my POD will cater to traffic, another one would be upgraded.
+
+
+
+[root@ip-172-31-17-218 09-deployments]# cat kubia-deployment-v1.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubia
+spec:
+  selector:
+    matchLabels:
+      app: kubia
+  replicas: 1
+  
+[root@ip-172-31-17-218 09-deployments]# kubectl apply -f kubia-deployment-v1.yaml
+[root@ip-172-31-17-218 09-deployments]# kubectl get deploy
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+kubia   0/1     1            0           12s
+[root@ip-172-31-17-218 09-deployments]# kubectl get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+kubia-59d857b444-h28tc   1/1     Running   0          40s
+
+[root@ip-172-31-17-218 09-deployments]# kubectl scale --replicas=2 deploy/kubia
+deployment.apps/kubia scaled
+
+[root@ip-172-31-17-218 09-deployments]# kubectl get rs
+NAME               DESIRED   CURRENT   READY   AGE
+kubia-59d857b444   2         2         2       6m43s
+
+
+[root@ip-172-31-17-218 09-deployments]# kubectl get deploy
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+kubia   2/2     2            2           112s
+
+[root@ip-172-31-17-218 09-deployments]# kubectl describe deploy kubia | grep -i image
+    Image:        luksa/kubia:v1
+	
+[root@ip-172-31-17-218 09-deployments]# kubectl get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+kubia-59d857b444-h28tc   1/1     Running   0          21m
+kubia-59d857b444-ztxm4   1/1     Running   0          20m
+
+
+[root@ip-172-31-17-218 09-deployments]# kubectl describe pod kubia-59d857b444-h28tc | grep -i image
+    Image:          luksa/kubia:v1
+    Image ID:       docker-pullable://luksa/kubia@sha256:259e3d728621f001a629a5fe4b56020d0a14e239b0ea82727c1398f155c75a5d
+  Normal  Pulling    26m   kubelet, ip-172-31-17-218.ap-southeast-1.compute.internal  Pulling image "luksa/kubia:v1"
+  Normal  Pulled     25m   kubelet, ip-172-31-17-218.ap-southeast-1.compute.internal  Successfully pulled image "luksa/kubia:v1"
+[root@ip-172-31-17-218 09-deployments]# kubectl describe pod kubia-59d857b444-ztxm4 | grep -i image
+    Image:          luksa/kubia:v1
+    Image ID:       docker-pullable://luksa/kubia@sha256:259e3d728621f001a629a5fe4b56020d0a14e239b0ea82727c1398f155c75a5d
+  Normal  Pulled     24m   kubelet, ip-172-31-17-218.ap-southeast-1.compute.internal  Container image "luksa/kubia:v1" already present on machine
+[root@ip-172-31-17-218 09-deployments]#
+
+
+[root@ip-172-31-17-218 09-deployments]# kubectl set image deploy/kubia nodejs=luksa/kubia:v2 --record
+deployment.apps/kubia image updated
+
+[root@ip-172-31-17-218 09-deployments]# kubectl get pods -w
+NAME                     READY   STATUS        RESTARTS   AGE
+kubia-59d857b444-h28tc   1/1     Terminating   0          35m
+kubia-59d857b444-ztxm4   1/1     Terminating   0          33m
+kubia-7d5c456ffc-hhv97   1/1     Running       0          6s
+kubia-7d5c456ffc-hx87m   1/1     Running       0          12s
+kubia-59d857b444-ztxm4   0/1     Terminating   0          34m
+kubia-59d857b444-ztxm4   0/1     Terminating   0          34m
+kubia-59d857b444-ztxm4   0/1     Terminating   0          34m
+kubia-59d857b444-h28tc   0/1     Terminating   0          35m
+kubia-59d857b444-h28tc   0/1     Terminating   0          35m
+kubia-59d857b444-h28tc   0/1     Terminating   0          35m
+^C
+[root@ip-172-31-17-218 09-deployments]# kubectl get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+kubia-7d5c456ffc-hhv97   1/1     Running   0          86s
+kubia-7d5c456ffc-hx87m   1/1     Running   0          92s
+
+[root@ip-172-31-17-218 09-deployments]# kubectl describe deploy kubia | grep -i image
+                        kubernetes.io/change-cause: kubectl set image deploy/kubia nodejs=luksa/kubia:v2 --record=true
+    Image:        luksa/kubia:v2
+
+[root@ip-172-31-17-218 09-deployments]# kubectl describe pod kubia-7d5c456ffc-hhv97 | grep -i image
+    Image:          luksa/kubia:v2
+    Image ID:       docker-pullable://luksa/kubia@sha256:216cdd252c24726012bd78d47c2538de2abe5d75ac5a8afddeed8b3833f9e88d
+  Normal  Pulled     6m29s  kubelet, ip-172-31-17-218.ap-southeast-1.compute.internal  Container image "luksa/kubia:v2" already present on machine
+[root@ip-172-31-17-218 09-deployments]# kubectl describe pod kubia-7d5c456ffc-hx87m | grep -i image
+    Image:          luksa/kubia:v2
+    Image ID:       docker-pullable://luksa/kubia@sha256:216cdd252c24726012bd78d47c2538de2abe5d75ac5a8afddeed8b3833f9e88d
+  Normal  Pulling    6m43s  kubelet, ip-172-31-17-218.ap-southeast-1.compute.internal  Pulling image "luksa/kubia:v2"
+  Normal  Pulled     6m38s  kubelet, ip-172-31-17-218.ap-southeast-1.compute.internal  Successfully pulled image "luksa/kubia:v2"
+[root@ip-172-31-17-218 09-deployments]#
+
+=======================================================================================================================================================================================================================================
+3.You have deployed an application, that is listening at port 8000. You used a replica-set to deploy it and created a NodePort service to make it accessible. 
+But when you test it, somehow the application is not reachable at the port. Write down your approach and sequentially all the steps that you will take to find out the issue.
+
+Approach:
+1)First check POD is running.
+2)Post creating svc. Check describe of svc --> EP should be POD IP: Port. If it is not such than, issue is there in SVC creation.
+3)Create Nodeport svc and describe it -->EP should be POD IP: Port. If it is not such than, issue in Nodeport svc creation.
+4)Basically in svc yaml, port is port of the service. Target port is port on which pod will listen and Nodeport is port of the physical worker Node.
+5)If we chnage the port of POD to 8080, then we can get output from below command also - 54.169.164.193:30123
+
+POD is listening at 8000, IP - 192.168.202.10
+service is listening at port 80, IP - 10.99.10.99
+Nodeport is 30123,  IP - 10.108.212.56
+
+
+[root@ip-172-31-17-218 05-services]# kubectl apply -f kubia-replicaset.yaml
+replicaset.apps/kubia created
+[root@ip-172-31-17-218 05-services]# kubectl get rs
+NAME    DESIRED   CURRENT   READY   AGE
+kubia   1         1         1       13s
+[root@ip-172-31-17-218 05-services]# kubectl get pods
+NAME          READY   STATUS    RESTARTS   AGE
+kubia-zr255   1/1     Running   0          17s
+[root@ip-172-31-17-218 05-services]#
+
+[root@ip-172-31-17-218 05-services]# kubectl describe pod kubia-zr255 | grep -i port
+    Port:           <none>
+    Host Port:      <none>
+
+[root@ip-172-31-17-218 05-services]# kubectl get pods -o wide
+NAME          READY   STATUS    RESTARTS   AGE    IP               NODE                                               NOMINATED NODE   READINESS GATES
+kubia-zr255   1/1     Running   0          4m5s   192.168.202.10   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+
+
+[root@ip-172-31-17-218 05-services]# cat kubia-svc.yaml
+
+[root@ip-172-31-17-218 05-services]# kubectl apply -f kubia-svc.yaml
+service/kubia2 created
+
+[root@ip-172-31-17-218 05-services]# kubectl get svc -o wide
+NAME         TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)   AGE   SELECTOR
+kubia2       ClusterIP   10.99.10.99   <none>        80/TCP    32s   app=kubia
+
+[root@ip-172-31-17-218 05-services]# kubectl get ep
+NAME         ENDPOINTS             AGE
+kubia2       192.168.202.10:8000   119s
+
+
+[root@ip-172-31-17-218 05-services]# kubectl describe svc kubia2
+Name:              kubia2
+Namespace:         default
+Labels:            <none>
+Annotations:       Selector:  app=kubia
+Type:              ClusterIP
+IP:                10.99.10.99
+Port:              <unset>  80/TCP
+TargetPort:        8000/TCP
+Endpoints:         192.168.202.10:8000
+Session Affinity:  None
+Events:            <none>
+[root@ip-172-31-17-218 05-services]#
+
+[root@ip-172-31-17-218 05-services]# kubectl apply -f kubia-svc-nodeport.yaml
+service/kubia-nodeport created
+[root@ip-172-31-17-218 05-services]# kubectl get ep
+NAME             ENDPOINTS             AGE
+kubia-nodeport   192.168.202.10:8000   8s
+kubia2           192.168.202.10:8000   5m2s
+
+[root@ip-172-31-17-218 05-services]# kubectl get svc -o wide
+NAME             TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE    SELECTOR
+kubia-nodeport   NodePort    10.108.212.56   <none>        80:30123/TCP   67s    app=kubia
+kubia2           ClusterIP   10.99.10.99     <none>        80/TCP         6m1s   app=kubia
+
+
+[root@ip-172-31-17-218 05-services]# kubectl describe svc kubia-nodeport
+Name:                     kubia-nodeport
+Namespace:                default
+Labels:                   <none>
+Annotations:              Selector:  app=kubia
+Type:                     NodePort
+IP:                       10.108.212.56
+Port:                     <unset>  80/TCP
+TargetPort:               8000/TCP
+NodePort:                 <unset>  30123/TCP
+Endpoints:                192.168.202.10:8000
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+[root@ip-172-31-17-218 05-services]#
+
+===================================================================================================================================================================================================================================
+4. FIRST : Take the voting app presentation (PPT) and understand the landscape of the application.
+1. go to root (cd /root/ ) . (both Master and Worker can perform this in their instances)
+2. git clone https://github.com/ashishrpandey/example-voting-app
+3. go to /root/example-voting-app/k8s-specifications
+4. [root@ip-172-31-7-102 k8s-specifications]# kubectl apply -f .
+5. for voting and result pods, Observe that NodePort is assigned.
+6. take your publicIP (your instance IP) : NodePort ► open 2 browsers , one for VOTING and one for Results.
+7 try voting and see the results paralelly in results page.
+8. Now try to delete the Pods one by one (first voting Pod, then worker pod, then db pod) and see what happens to the voting and result app after deleting.
+9 Write your observations in a text file.
+10. what happens after db pod deletion. 
+11. complete the assignment by making the result pod work. (if you delete db pod, results would not be captured.So repeat what we did in the class in order to make the result pod work.).
+12. Write in the text file, what you did in order to make the result pod work.
+upload the TEXT file , containing ALL your observations in the gitHub. Share the gitHub link in the Assignment page in edYoda.
+
+in summary, your text file should contain:
+1. Commands that you used during the assignment.
+2. snapshot of logs (wherever possible)
+3. your comment on WHY result app STOPPED working after db pod stop
+4. your answer to HOW YOU MADE THE RESULT POD work. 
+5. Some jargons (just names are enough- dont need sentences) that you learnt from the 40-hour Training session
+
+
+
+1. go to root (cd /root/ ) . (both Master and Worker can perform this in their instances)
+2. git clone https://github.com/ashishrpandey/example-voting-app
+3. go to /root/example-voting-app/k8s-specifications
+4. [root@ip-172-31-7-102 k8s-specifications]# kubectl apply -f .
+
+[root@ip-172-31-17-218 ~]# git clone https://github.com/ashishrpandey/example-voting-app
+Cloning into 'example-voting-app'...
+remote: Enumerating objects: 494, done.
+remote: Total 494 (delta 0), reused 0 (delta 0), pack-reused 494
+Receiving objects: 100% (494/494), 236.17 KiB | 12.43 MiB/s, done.
+Resolving deltas: 100% (179/179), done.
+[root@ip-172-31-17-218 ~]# cd /root/example-voting-app/k8s-specifications
+[root@ip-172-31-17-218 k8s-specifications]# ll
+total 36
+-rw-r--r-- 1 root root 401 Jul  8 07:19 db-deployment.yaml
+-rw-r--r-- 1 root root 146 Jul  8 07:19 db-service.yaml
+-rw-r--r-- 1 root root 402 Jul  8 07:19 redis-deployment.yaml
+-rw-r--r-- 1 root root 152 Jul  8 07:19 redis-service.yaml
+-rw-r--r-- 1 root root 299 Jul  8 07:19 result-deployment.yaml
+-rw-r--r-- 1 root root 195 Jul  8 07:19 result-service.yaml
+-rw-r--r-- 1 root root 289 Jul  8 07:19 vote-deployment.yaml
+-rw-r--r-- 1 root root 192 Jul  8 07:19 vote-service.yaml
+-rw-r--r-- 1 root root 292 Jul  8 07:19 worker-deployment.yaml
+[root@ip-172-31-17-218 k8s-specifications]# kubectl apply -f .
+deployment.apps/db created
+service/db created
+deployment.apps/redis created
+service/redis created
+deployment.apps/result created
+service/result created
+deployment.apps/vote created
+service/vote created
+deployment.apps/worker created
+[root@ip-172-31-17-218 k8s-specifications]#
+
+
+
+5. for voting and result pods, Observe that NodePort is assigned.
+[root@ip-172-31-17-218 k8s-specifications]# kubectl get svc -o wide
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE     SELECTOR
+db           ClusterIP   10.98.129.120   <none>        5432/TCP         86s     app=db
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP          2m55s   <none>
+redis        ClusterIP   10.107.62.207   <none>        6379/TCP         85s     app=redis
+result       NodePort    10.98.43.153    <none>        5001:31001/TCP   85s     app=result
+vote         NodePort    10.109.81.118   <none>        5000:31000/TCP   85s     app=vote
+
+
+54.169.164.193:31000 - vote
+54.169.164.193:31001 - result
+
+Opened chrome and Microsoft edge - casted vote in favour of cat from both. got cat percentage as 100% and dog as 0% in result app and Vote count as 2.
+
+
+
+8. Now try to delete the Pods one by one (first voting Pod, then worker pod, then db pod) and see what happens to the voting and result app after deleting.
+9 Write your observations in a text file.
+10. what happens after db pod deletion. 
+11. complete the assignment by making the result pod work. (if you delete db pod, results would not be captured.So repeat what we did in the class in order to make the result pod work.).
+12. Write in the text file, what you did in order to make the result pod work.
+
+
+[root@ip-172-31-17-218 k8s-specifications]# kubectl get po -o wide
+NAME                      READY   STATUS    RESTARTS   AGE     IP               NODE                                               NOMINATED NODE   READINESS GATES
+db-b54cd94f4-vkrcv        1/1     Running   0          9m50s   192.168.202.55   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+redis-868d64d78-dbchp     1/1     Running   0          9m50s   192.168.202.56   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+result-5d57b59f4b-p2k97   1/1     Running   0          9m49s   192.168.202.58   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+vote-94849dc97-f858p      1/1     Running   0          9m49s   192.168.202.57   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+worker-dd46d7584-5rtt2    1/1     Running   0          9m49s   192.168.202.59   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+
+[root@ip-172-31-17-218 k8s-specifications]# kubectl delete pod vote-94849dc97-f858p
+pod "vote-94849dc97-f858p" deleted
+[root@ip-172-31-17-218 k8s-specifications]# kubectl get po -o wide
+NAME                      READY   STATUS    RESTARTS   AGE   IP               NODE                                               NOMINATED NODE   READINESS GATES
+db-b54cd94f4-vkrcv        1/1     Running   0          11m   192.168.202.55   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+redis-868d64d78-dbchp     1/1     Running   0          11m   192.168.202.56   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+result-5d57b59f4b-p2k97   1/1     Running   0          11m   192.168.202.58   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+vote-94849dc97-bjtjc      1/1     Running   0          8s    192.168.202.60   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+worker-dd46d7584-5rtt2    1/1     Running   0          11m   192.168.202.59   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+[root@ip-172-31-17-218 k8s-specifications]#
+
+
+-No impact on results after deleting voting POD.
+
+
+
+[root@ip-172-31-17-218 k8s-specifications]# kubectl delete pod worker-dd46d7584-5rtt2
+pod "worker-dd46d7584-5rtt2" deleted
+^C
+[root@ip-172-31-17-218 k8s-specifications]# kubectl get po -o wide
+NAME                      READY   STATUS        RESTARTS   AGE   IP               NODE                                               NOMINATED NODE   READINESS GATES
+db-b54cd94f4-vkrcv        1/1     Running       0          13m   192.168.202.55   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+redis-868d64d78-dbchp     1/1     Running       0          13m   192.168.202.56   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+result-5d57b59f4b-p2k97   1/1     Running       0          13m   192.168.202.58   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+vote-94849dc97-bjtjc      1/1     Running       0          95s   192.168.202.60   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+worker-dd46d7584-5rtt2    1/1     Terminating   0          13m   192.168.202.59   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+worker-dd46d7584-cbsjq    1/1     Running       0          5s    192.168.202.61   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+[root@ip-172-31-17-218 k8s-specifications]#
+
+-No impact on results on deleting worker pod
+
+
+
+[root@ip-172-31-17-218 k8s-specifications]# kubectl delete pod db-b54cd94f4-vkrcv
+pod "db-b54cd94f4-vkrcv" deleted
+^C
+[root@ip-172-31-17-218 k8s-specifications]# kubectl get po -o wide
+NAME                      READY   STATUS        RESTARTS   AGE     IP               NODE                                               NOMINATED NODE   READINESS GATES
+db-b54cd94f4-rx54q        1/1     Running       0          10s     192.168.202.62   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+db-b54cd94f4-vkrcv        1/1     Terminating   0          15m     192.168.202.55   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+redis-868d64d78-dbchp     1/1     Running       0          15m     192.168.202.56   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+result-5d57b59f4b-p2k97   1/1     Running       0          15m     192.168.202.58   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+vote-94849dc97-bjtjc      1/1     Running       0          3m24s   192.168.202.60   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+worker-dd46d7584-cbsjq    1/1     Running       0          114s    192.168.202.61   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+[root@ip-172-31-17-218 k8s-specifications]#
+
+-Post deleting DB POD, Data stored in DB is gone, though DB POD created again, now result POD is showing Cat and dog both 50%. Also, Vote is NIL.
+-Now even if I cast vote in favour of Cat, then results is not getting updated.
+-Now even though the DB POD came up, but due to synchronous nature of connection, the socket betn result app and DB is still on old connection points.
+-So, the newly casted vote is not reflecting. So, we need to reset the scoket connection betn result and DB app, so that new CP comes up.
+-To do same, we need to delete result POD. Once it came up again, then socket will get established.
+
+
+[root@ip-172-31-17-218 k8s-specifications]# kubectl delete pod result-5d57b59f4b-p2k97
+pod "result-5d57b59f4b-p2k97" deleted
+^C
+[root@ip-172-31-17-218 k8s-specifications]# kubectl get po -o wide
+NAME                      READY   STATUS        RESTARTS   AGE   IP               NODE                                               NOMINATED NODE   READINESS GATES
+db-b54cd94f4-rx54q        1/1     Running       0          14m   192.168.202.62   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+redis-868d64d78-dbchp     1/1     Running       0          29m   192.168.202.56   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+result-5d57b59f4b-66gjz   1/1     Running       0          9s    192.168.202.63   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+result-5d57b59f4b-p2k97   1/1     Terminating   0          29m   192.168.202.58   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+vote-94849dc97-bjtjc      1/1     Running       0          17m   192.168.202.60   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+worker-dd46d7584-cbsjq    1/1     Running       1          16m   192.168.202.61   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+
+[root@ip-172-31-17-218 k8s-specifications]# kubectl get po -o wide
+NAME                      READY   STATUS    RESTARTS   AGE   IP               NODE                                               NOMINATED NODE   READINESS GATES
+db-b54cd94f4-rx54q        1/1     Running   0          15m   192.168.202.62   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+redis-868d64d78-dbchp     1/1     Running   0          30m   192.168.202.56   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+result-5d57b59f4b-66gjz   1/1     Running   0          45s   192.168.202.63   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+vote-94849dc97-bjtjc      1/1     Running   0          18m   192.168.202.60   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+worker-dd46d7584-cbsjq    1/1     Running   1          16m   192.168.202.61   ip-172-31-17-218.ap-southeast-1.compute.internal   <none>           <none>
+
+
+Now, when I cast a vote in favour of CAT, now result app is showing 100% against cat and 1 Vote casted. So, now this example-voting app is running fine.
+Basiaclly, DB is a stateful POD, stores data in it. Remaining all nodes do not store anything in it. So, when we reboot them, we have no major impact.
+
+
+
